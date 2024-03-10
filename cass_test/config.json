@@ -9,18 +9,18 @@
             },
             {
                 "wait": {
-                    "duration": 30
+                    "duration": 10
                 }
             },
             {
                 "apply": {
-                    "file": "cass_test/crd.yaml",
+                    "file": "cass_test/output.yaml",
                     "operator": true
                 }
             }
         ]
     },
     "crd_name": "cassandradatacenters.cassandra.datastax.com",
-    "seed_custom_resource": "cass_test/cr_sample.yaml",
-    "kubernetes_version": "v1.29.1"
+    "seed_custom_resource": "cass_test/sample_cr.yaml",
+    "kubernetes_version": "v1.29.2"
 }

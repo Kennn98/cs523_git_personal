@@ -1,4 +1,5 @@
 ---
+# Source: cass-operator/crds/cassandradatacenters.yaml
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -208,11 +209,6 @@ spec:
                   cluster.
                 minLength: 2
                 type: string
-              config:
-                description: Config for the server, in YAML format
-                format: byte
-                type: string
-                x-kubernetes-preserve-unknown-fields: true
               configBuilderImage:
                 description: Container image for the config builder init container.
                   Overrides value from ImageConfig ConfigBuilderImage
@@ -1937,10 +1933,6 @@ spec:
                                 - containerPort
                                 type: object
                               type: array
-                              x-kubernetes-list-map-keys:
-                              - containerPort
-                              - protocol
-                              x-kubernetes-list-type: map
                             readinessProbe:
                               description: 'Periodic probe of container service readiness.
                                 Container will be removed from service endpoints if
@@ -4712,10 +4704,6 @@ spec:
                                 - containerPort
                                 type: object
                               type: array
-                              x-kubernetes-list-map-keys:
-                              - containerPort
-                              - protocol
-                              x-kubernetes-list-type: map
                             readinessProbe:
                               description: 'Periodic probe of container service readiness.
                                 Container will be removed from service endpoints if
@@ -6052,10 +6040,6 @@ spec:
                           - whenUnsatisfiable
                           type: object
                         type: array
-                        x-kubernetes-list-map-keys:
-                        - topologyKey
-                        - whenUnsatisfiable
-                        x-kubernetes-list-type: map
                       volumes:
                         description: 'List of volumes that can be mounted by containers
                           belonging to the pod. More info: https://kubernetes.io/docs/concepts/storage/volumes'
@@ -11193,7 +11177,9 @@ spec:
     storage: true
     subresources:
       status: {}
+
 ---
+# Source: cass-operator/crds/cassandratasks.yaml
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -11478,1347 +11464,387 @@ spec:
     storage: true
     subresources:
       status: {}
----
-# The following patch adds a directive for certmanager to inject CA into the CRD
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
-  name: cassandradatacenters.cassandra.datastax.com
----
-# The following patch adds a directive for certmanager to inject CA into the CRD
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
-  name: cassandrajobs.control.k8ssandra.io
----
-# Remove the "config" section from the CRD, and enable
-# x-kubernetes-preserve-unknown-fields.
-#
-# This is necessary because the config field has a dynamic
-# schema which depends on the DSE version selected, and
-# dynamic schema aren't possible to fully specify and
-# validate via openAPI V3.
-#
-# Instead, we remove the config field from the schema
-# entirely and instruct openAPI/k8s to preserve fields even
-# if they aren't specified in the CRD. The field itself is defined
-# as a json.RawMessage, see dsedatacenter_types.go in the
-# api's subdirectory for details.
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/config
----
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplateSpec/properties/spec/properties/containers/items/properties/ports/x-kubernetes-list-map-keys
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplateSpec/properties/spec/properties/containers/items/properties/ports/x-kubernetes-list-type
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplateSpec/properties/spec/properties/initContainers/items/properties/ports/x-kubernetes-list-map-keys
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplateSpec/properties/spec/properties/initContainers/items/properties/ports/x-kubernetes-list-type
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplateSpec/properties/spec/properties/topologySpreadConstraints/x-kubernetes-list-map-keys
-- op: remove
-  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplateSpec/properties/spec/properties/topologySpreadConstraints/x-kubernetes-list-type
----
-# The following patch enables a conversion webhook for the CRD
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: cassandradatacenters.cassandra.datastax.com
-spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          namespace: system
-          name: webhook-service
-          path: /convert
----
-# The following patch enables a conversion webhook for the CRD
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: cassandrajobs.control.k8ssandra.io
-spec:
-  conversion:
-    strategy: Webhook
-    webhook:
-      clientConfig:
-        service:
-          namespace: system
-          name: webhook-service
-          path: /convert
-      conversionReviewVersions:
-      - v1
----
-# This patch add annotation to admission webhook config and
-# the variables $(CERTIFICATE_NAMESPACE) and $(CERTIFICATE_NAME) will be substituted by kustomize.
-# apiVersion: admissionregistration.k8s.io/v1
-# kind: MutatingWebhookConfiguration
-# metadata:
-#   name: mutating-webhook-configuration
-#   annotations:
-#     cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  name: validating-webhook-configuration
-  annotations:
-    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: controller-manager
-  namespace: system
-spec:
-  template:
-    spec:
-      containers:
-      - name: manager
-        args:
-        - "--config=/configs/controller_manager_config.yaml"
-        volumeMounts:
-        - name: manager-config
-          mountPath: /configs
-      volumes:
-      - name: manager-config
-        configMap:
-          name: manager-config
----
-# This patch inject a sidecar container which is a HTTP proxy for the
-# controller manager, it performs RBAC authorization against the Kubernetes API using SubjectAccessReviews.
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: controller-manager
-  namespace: system
-spec:
-  template:
-    spec:
-      containers:
-      - name: kube-rbac-proxy
-        image: gcr.io/kubebuilder/kube-rbac-proxy:0.13.1
-        args:
-        - "--secure-listen-address=0.0.0.0:8443"
-        - "--upstream=http://127.0.0.1:8080/"
-        - "--logtostderr=true"
-        - "--v=10"
-        ports:
-        - containerPort: 8443
-          name: https
-      - name: manager
-        args:
-        - "--health-probe-bind-address=:8081"
-        - "--metrics-bind-address=127.0.0.1:8080"
-        - "--leader-elect"
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: metrics-reader
-rules:
-- nonResourceURLs: ["/metrics"]
-  verbs: ["get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: proxy-role
-rules:
-- apiGroups: ["authentication.k8s.io"]
-  resources:
-  - tokenreviews
-  verbs: ["create"]
-- apiGroups: ["authorization.k8s.io"]
-  resources:
-  - subjectaccessreviews
-  verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: proxy-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: proxy-role
-subjects:
-- kind: ServiceAccount
-  name: controller-manager
-  namespace: system
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: controller-manager-metrics-service
-  namespace: system
-spec:
-  ports:
-  - name: https
-    port: 8443
-    targetPort: https
-  selector:
-    control-plane: controller-manager
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: system
----
-apiVersion: config.k8ssandra.io/v1beta1
-kind: OperatorConfig
-metadata:
-  name: operator-config
-health:
-  healthProbeBindAddress: :8081
-metrics:
-  bindAddress: 127.0.0.1:8080
-webhook:
-  port: 9443
-leaderElection:
-  leaderElect: true
-  resourceName: b569adb7.cassandra.datastax.com
-disableWebhooks: false
-imageConfigFile: /configs/image_config.yaml
----
-# The following patch adds a directive for certmanager to inject CA into the CRD
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
-  name: cassandradatacenters.cassandra.datastax.com
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: controller-manager
-  namespace: system
-spec:
-  template:
-    spec:
-      containers:
-      - name: manager
-        ports:
-        - containerPort: 9443
-          name: webhook-server
-          protocol: TCP
-        volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: cert
-          readOnly: true
-      volumes:
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: webhook-server-cert
----
-# This patch add annotation to admission webhook config and
-# the variables $(CERTIFICATE_NAMESPACE) and $(CERTIFICATE_NAME) will be substituted by kustomize.
-# apiVersion: admissionregistration.k8s.io/v1
-# kind: MutatingWebhookConfiguration
-# metadata:
-#   name: mutating-webhook-configuration
-#   annotations:
-#     cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  name: validating-webhook-configuration
-  annotations:
-    cert-manager.io/inject-ca-from: $(CERTIFICATE_NAMESPACE)/$(CERTIFICATE_NAME)
----
-# The following manifests contain a self-signed issuer CR and a certificate CR.
-# More document can be found at https://docs.cert-manager.io
-# WARNING: Targets CertManager v1.0. Check https://cert-manager.io/docs/installation/upgrading/ for breaking changes.
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: selfsigned-issuer
-  namespace: system
-spec:
-  selfSigned: {}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: serving-cert  # this name should match the one appeared in kustomizeconfig.yaml
-  namespace: system
-spec:
-  # $(SERVICE_NAME) and $(SERVICE_NAMESPACE) will be substituted by kustomize
-  dnsNames:
-  - $(SERVICE_NAME).$(SERVICE_NAMESPACE).svc
-  - $(SERVICE_NAME).$(SERVICE_NAMESPACE).svc.cluster.local
-  issuerRef:
-    kind: Issuer
-    name: selfsigned-issuer
-  secretName: webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
----
-apiVersion: config.k8ssandra.io/v1beta1
-kind: OperatorConfig
-metadata:
-  name: operator-config
-health:
-  healthProbeBindAddress: :8081
-metrics:
-  bindAddress: 127.0.0.1:8080
-webhook:
-  port: 9443
-leaderElection:
-  leaderElect: true
-  resourceName: b569adb7.cassandra.datastax.com
-disableWebhooks: true
-imageConfigFile: /configs/image_config.yaml
----
-apiVersion: config.k8ssandra.io/v1beta1
-kind: ImageConfig
-metadata:
-  name: image-config
-images:
-  system-logger: "k8ssandra/system-logger:latest"
-  config-builder: "datastax/cass-config-builder:1.0-ubi8"
-  k8ssandra-client: "k8ssandra/k8ssandra-client:v0.2.2"
-  # cassandra:
-  #   "4.0.0": "k8ssandra/cassandra-ubi:latest"
-  # dse:
-  #   "6.8.999": "datastax/dse-server-prototype:latest"
-# imageRegistry: "localhost:5000"
-# imagePullPolicy: Always
-# imagePullSecret:
-#   name: my-secret-pull-registry
-defaults:
-  # Note, postfix is ignored if repository is not set
-  cassandra:
-    repository: "k8ssandra/cass-management-api"
-    # suffix: "-ubi8"
-  dse:
-    repository: "datastax/dse-mgmtapi-6_8"
-    suffix: "-ubi8"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: controller-manager
-  namespace: system
-  labels:
-    control-plane: controller-manager
-spec:
-  selector:
-    matchLabels:
-      name: cass-operator
-      control-plane: controller-manager
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: cass-operator
-        control-plane: controller-manager
-    spec:
-      securityContext:
-        runAsNonRoot: true
-      containers:
-      - command:
-        - /manager
-        args:
-        - --leader-elect
-        image: controller:latest
-        name: manager
-        imagePullPolicy: IfNotPresent
-        securityContext:
-          allowPrivilegeEscalation: false
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8081
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 8081
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          limits:
-            cpu: 200m
-            memory: 100Mi
-          requests:
-            cpu: 100m
-            memory: 20Mi
-        env:
-        - name: WATCH_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-      serviceAccountName: controller-manager
-      terminationGracePeriodSeconds: 10
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  name: validating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  - v1beta1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /validate-cassandra-datastax-com-v1beta1-cassandradatacenter
-  failurePolicy: Fail
-  name: vcassandradatacenter.kb.io
-  rules:
-  - apiGroups:
-    - cassandra.datastax.com
-    apiVersions:
-    - v1beta1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - cassandradatacenters
-  sideEffects: None
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: webhook-service
-  namespace: system
-spec:
-  ports:
-    - port: 443
-      targetPort: 9443
-  selector:
-    control-plane: controller-manager
----
-apiVersion: scorecard.operatorframework.io/v1alpha3
-kind: Configuration
-metadata:
-  name: config
-stages:
-- parallel: true
-  tests: []
----
-- op: add
-  path: /stages/0/tests/-
-  value:
-    entrypoint:
-    - scorecard-test
-    - basic-check-spec
-    image: quay.io/operator-framework/scorecard-test:v1.6.1
-    labels:
-      suite: basic
-      test: basic-check-spec-test
----
-- op: add
-  path: /stages/0/tests/-
-  value:
-    entrypoint:
-    - scorecard-test
-    - olm-bundle-validation
-    image: quay.io/operator-framework/scorecard-test:v1.6.1
-    labels:
-      suite: olm
-      test: olm-bundle-validation-test
-- op: add
-  path: /stages/0/tests/-
-  value:
-    entrypoint:
-    - scorecard-test
-    - olm-crds-have-validation
-    image: quay.io/operator-framework/scorecard-test:v1.6.1
-    labels:
-      suite: olm
-      test: olm-crds-have-validation-test
-- op: add
-  path: /stages/0/tests/-
-  value:
-    entrypoint:
-    - scorecard-test
-    - olm-crds-have-resources
-    image: quay.io/operator-framework/scorecard-test:v1.6.1
-    labels:
-      suite: olm
-      test: olm-crds-have-resources-test
-- op: add
-  path: /stages/0/tests/-
-  value:
-    entrypoint:
-    - scorecard-test
-    - olm-spec-descriptors
-    image: quay.io/operator-framework/scorecard-test:v1.6.1
-    labels:
-      suite: olm
-      test: olm-spec-descriptors-test
-- op: add
-  path: /stages/0/tests/-
-  value:
-    entrypoint:
-    - scorecard-test
-    - olm-status-descriptors
-    image: quay.io/operator-framework/scorecard-test:v1.6.1
-    labels:
-      suite: olm
-      test: olm-status-descriptors-test
----
-# Prometheus Monitor Service (Metrics)
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: controller-manager-metrics-monitor
-  namespace: system
-spec:
-  endpoints:
-    - path: /metrics
-      port: https
-      scheme: https
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-      tlsConfig:
-        insecureSkipVerify: true
-  selector:
-    matchLabels:
-      control-plane: controller-manager
----
-apiVersion: operators.coreos.com/v1alpha1
-kind: ClusterServiceVersion
-metadata:
-  annotations:
-    alm-examples: '[]'
-    capabilities: Auto Pilot
-    categories: Database,Big Data,OpenShift Optional
-    certified: "true"
-    description: |
-      Simple provisioning, turn-key operations, and automated remediation of Apache Cassandra clusters
-    repository: https://github.com/k8ssandra/cass-operator
-    support: DataStax
-  name: cass-operator.v0.0.0
-  namespace: placeholder
-spec:
-  apiservicedefinitions: {}
-  customresourcedefinitions:
-    owned:
-    - description: CassandraDatacenter is the Schema for the cassandradatacenters
-        API
-      displayName: Cassandra Datacenter
-      kind: CassandraDatacenter
-      name: cassandradatacenters.cassandra.datastax.com
-      version: v1beta1
-    - description: CassandraTask is the Schema for the cassandrajobs API
-      displayName: Cassandra Task
-      kind: CassandraTask
-      name: cassandratasks.control.k8ssandra.io
-      version: v1alpha1
-  description: ../../docs/developer/csv-description.md
-  displayName: DataStax Kubernetes Operator for Apache Cassandra
-  icon:
-  - base64data: |
-      images/ds.png
-    mediatype: image/png
-  install:
-    spec:
-      deployments: null
-    strategy: ""
-  installModes:
-  - supported: true
-    type: OwnNamespace
-  - supported: true
-    type: SingleNamespace
-  - supported: true
-    type: MultiNamespace
-  - supported: true
-    type: AllNamespaces
-  keywords:
-  - k8ssandra
-  - cass-operator
-  - DataStax Enterprise
-  - Apache Cassandra
-  - DSE
-  - C*
-  - Cassandra
-  links:
-  - name: DataStax
-    url: https://datastax.com
-  - name: Operator GitHub Repo
-    url: https://github.com/k8ssandra/cass-operator
-  - name: Config Builder GitHub Repo
-    url: https://github.com/datastax/cass-config-builder
-  - name: Documentation [1]
-    url: https://github.com/k8ssandra/cass-operator/tree/master/docs/user
-  - name: Documentation [2]
-    url: https://docs.datastax.com/en/cass-operator/doc/cass-operator/cassOperatorTOC.html
-  maintainers:
-  - email: cass-operator@datastax.com
-    name: DataStax Operator Team
-  maturity: stable
-  minKubeVersion: 1.21.0
-  provider:
-    name: DataStax
-  version: 0.0.0
----
-source:
-  kind: ConfigMap
-  name: field-config
-  fieldPath: data.csv-description\.md
-targets:
-  - select:
-      kind: ClusterServiceVersion
-      name: cass-operator.v0.0.0
-    fieldPaths:
-      - spec.description
----
-- op: add
-  path: /spec/customresourcedefinitions/owned/0/specDescriptors
-  value:
-    - path: serverType
-      description: Server Type
-      displayName: Server Type
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:select:cassandra
-        - urn:alm:descriptor:com.tectonic.ui:select:dse
-    - path: serverVersion
-      description: Server Version
-      displayName: Server Version
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: clusterName
-      description: |
-        Name of the Cassandra cluster. Multiple CassandraDatacenter
-        objects in the same namespace and Cluster Name
-        will automatically be wired together as a single cluster.
-      displayName: Cluster Name
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: size
-      description: Size
-      displayName: Size
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:podCount
-    - path: racks
-      description: |
-        Collection of logical rack identifiers, these may be named 
-        and specify a zone to limit pod deployment."
-      displayName: Racks
-    - path: racks[0].name
-      description: |
-        "User friendly name of the rack. Limit characters to 
-        alphanumeric values, dashes, and underscores."
-      displayName: Name
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - displayName: Rack Node Affinity Labels
-      description: NodeAffinityLabels to pin the rack, using node affinity
-      path: racks[0].nodeAffinityLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:nodeAffinity"
-    - path: racks[0].zone
-      description: |
-        failure-domain.beta.kubernetes.io/zone node label value
-        where pods related to this rack will be restricted. Note
-        the value may be in the topology.kubernetes.io/zone label
-        as well.
-      displayName: Zone
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: dseWorkloads.analyticsEnabled
-      description: |
-        Enables the analytics advanced workload on DSE pods
-      displayName: Analytics
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-        - urn:alm:descriptor:com.tectonic.ui:hidden
-    - path: dseWorkloads.searchEnabled
-      description: |
-        Enables the search advanced workload on DSE pods
-      displayName: Search
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: dseWorkloads.graphEnabled
-      description: |
-        Enables the graph advanced workloads on DSE pods
-      displayName: Graph
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-        - urn:alm:descriptor:com.tectonic.ui:hidden
-    - path: resources
-      description: "Resource requests and limits for each Cassandra pod in the \ncluster. Note: Only specify CPU and memory limits here.\n"
-      displayName: Resources
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
-    - path: networking.hostNetwork
-      description: |
-        Enables host network configuration for pods. Note only one pod is permitted per worker in this configuration.
-      displayName: Host network
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: networking.nodePort
-      description: |
-        Exposed ports on the Kubernetes node level for forwarding services to Cassandra pods. Most deployments will not use this functionality.
-      displayName: Node Port Network Configuration
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: networking.nodePort.internode
-      description: |
-        Internode port to use when leveraging Node Port network configuration.
-      displayName: Internode Port
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:number
-    - path: networking.nodePort.internodeSSL
-      description: |
-        Internode SSL port to use when leveraging Node Port network configuration.
-      displayName: Internode SSL Port
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:number
-    - path: networking.nodePort.native
-      description: |
-        Native transport port to use when leveraging Node Port network configuration.
-      displayName: Native Port
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:number
-    - path: networking.nodePort.nativeSSL
-      description: |
-        Native transport SSL port to use when leveraging Node Port network configuration.
-      displayName: Native SSL Port
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:number
-    - path: storageConfig
-      description: |
-        Storage descriptors used during the provisioning and consumption
-        of Persistent Volumes.
-      displayName: Storage Configuration
-    - path: storageConfig.cassandraDataVolumeClaimSpec.storageClassName
-      description: "Name of the storage class where data will reside. This must be \ndefined within the Kubernetes prior to provisioning a datacenter.\n"
-      displayName: Storage Class
-      x-descriptors:
-        - urn:alm:descriptor:io.kubernetes:StorageClass
-    - path: storageConfig.cassandraDataVolumeClaimSpec.accessModes[0]
-      description: |
-        Access mode of the volume
-      displayName: Access Modes
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:select:ReadWriteOnce
-    - path: storageConfig.cassandraDataVolumeClaimSpec.resources.requests.storage
-      description: |
-        Storage requirements for the Cassandra data volume.
-      displayName: Data volume size
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: storageConfig.additionalVolumes
-      description: |
-        Collection of additional storage volumes
-      displayName: Additional Volumes
-    - path: storageConfig.additionalVolumes[0].name
-      displayName: Name
-      description: |
-        Volume name
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:text"
-    - path: storageConfig.additionalVolumes[0].accessModes
-      displayName: Access Modes
-      description: |
-        Volume access modes
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:text"
-    - path: storageConfig.additionalVolumes[0].resources.requests.storage
-      description: |
-        Storage requirements for the additional data volume.
-      displayName: Data volume size
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: storageConfig.additionalVolumes[0].storageClassName
-      description: |
-        Name of the storage class this volume should use
-      displayName: Storage Class
-      x-descriptors:
-        - urn:alm:descriptor:io.kubernetes:StorageClass
-    - path: superuserSecretName
-      description: "Kubernetes Secret containing a username and password for\nthe initial super user accout. Omitting this field will\nresult in a secret being created automatically with \nrandom values for each.\n"
-      displayName: Superuser Secret Name
-      x-descriptors:
-        - urn:alm:descriptor:io.kubernetes:Secret
-    - displayName: DC Node Affinity Labels
-      description: NodeAffinityLabels to pin the Datacenter, using node affinity
-      path: nodeAffinityLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:nodeAffinity"
-    - path: nodeSelector
-      description: |
-        Selector for identifying which nodes the DC pods should be deployed on.
-      displayName: Node Selector
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: allowMultipleNodesPerWorker
-      description: "Allows multiple Cassandra pods per Kubernetes worker. \nEnsure appropriate limits and requests are set in the\nresource field to limit the number of pods per worker.\n"
-      displayName: Allow Multiple Nodes Per Worker
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: stopped
-      description: |
-        When enabled, stops all pods making up the cluster. Storage
-        is retained, but all compute instances are stopped.
-      displayName: Stopped
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: rollingRestartRequested
-      description: "Request a restart of all nodes in the cluster in a rolling \nfashion to prevent service interuptions. After the restart\nis complete this field is set back to false.\n"
-      displayName: Rolling Restart Requested
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: canaryUpgrade
-      description: "Informs the operator to apply the requested changes to\na single rack. After manual validation set this value \nback to false and the operator will continue deployment.\n"
-      displayName: Canary Upgrade
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: canaryUpgradeCount
-      description: |
-        The number of nodes that will be updated when CanaryUpgrade
-        is true. Note that the value is either 0 or greater than the rack
-        size, then all nodes in the rack will get updated.
-      displayName: Canary Upgrade Count
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:podCount
-    - path: serverImage
-      description: |
-        Optional: Specify the name of the image to use for each
-        node in the cluster.
-      displayName: Server Image
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: systemLoggerImage
-      description: |
-        Container image for the log tailing sidecar container.
-      displayName: System Logger Image
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-    - path: configBuilderImage
-      description: |
-        Optional: Specify the name of the image to use when
-        rendering configuration files as each node in the
-        cluster is initialized."
-      displayName: Config Builder Image
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: configBuilderResource
-      description: "Resource requests and limits for each Cassandra pod in the \ncluster. Note: Only specify CPU and memory limits here.\n"
-      displayName: Config Builder Resources
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: replaceNodes
-      description: |
-        A list of pod names that need to be replaced
-      displayName: Replace Nodes
-    - path: replaceNodes[0]
-      description: |
-        A list of pod names that need to be replaced
-      displayName: Replace Nodes
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: disableSystemLoggerSidecar
-      description: |
-        Configuration for disabling the simple log tailing sidecar
-        container. Our default is to have it enabled.
-      displayName: Disable System Logger Sidecar
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: dockerImageRunsAsCassandra
-      description: |
-        Indicates whether the Cassandra container runs as the built-in `cassandra` user. 
-        On OpenShift clusters this field MUST be set to false given the random UID and GID
-        assigned to each pod / container.
-      displayName: Docker image runs as Cassandra
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:booleanSwitch
-    - path: forceUpgradeRacks[0]
-      description: |
-        Force upgrading of racks
-      displayName: Force Upgrade Racks
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: additionalSeeds[0]
-      description: |
-        Additional seeds for Cassandra
-      displayName: Additional Seeds
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:text
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: additionalServiceConfig
-      description: |
-        AdditionalServiceConfig allows to define additional parameters
-        that are included in the created Services. Note, users can override
-        values set by cass-operator and doing so could break cass-operator
-        functionality. Avoid label "cass-operator" and anything that starts
-        with "cassandra.datastax.com/"
-      displayName: Additional Service Configuration
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:hidden
-    - path: additionalServiceConfig.additionalSeedService
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.additionalSeedService.additionalAnnotations
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.additionalSeedService.additionalLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.allpodsService
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.allpodsService.additionalAnnotations
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.allpodsService.additionalLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.dcService
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.dcService.additionalAnnotations
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.dcService.additionalLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.nodePortService
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.nodePortService.additionalAnnotations
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.nodePortService.additionalLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.seedService
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.seedService.additionalAnnotations
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: additionalServiceConfig.seedService.additionalLabels
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: serviceAccount
-      description: Service Account
-      displayName: Service Account
-      x-descriptors:
-        - urn:alm:descriptor:io.kubernetes:ServiceAccount
-        - urn:alm:descriptor:com.tectonic.ui:advanced
-    - path: reaper
-      description: |
-        Deprecated: Reaper container settings
-      displayName: Reaper
-    - path: reaper.enabled
-      description: |
-        Deprecated: Enable reaper sidecar support
-      displayName: Enable
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: reaper.image
-      description: |
-        Deprecated: Image coordinate for reaper sidecar
-      displayName: Image
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: reaper.imagePullPolicy
-      description: |
-        Deprecated: Image pull policy for sidecar
-      displayName: Image Pull Policy
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: reaper.resources
-      description: |
-        Deprecated: Reaper sidecar resources
-      displayName: Resources
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:hidden"
-    - path: systemLoggerResources
-      description: |
-        Resources for the system logger sidecar container
-      displayName: System Logger Resources
-      x-descriptors:
-        - urn:alm:descriptor:com.tectonic.ui:resourceRequirements
-    - path: config
-      description: |
-        JSON object representing configuration overrides.
-      displayName: Config
-    - path: configSecret
-      description: "ConfigSecret is the name of a secret that contains configuration\nfor Cassandra. The secret is expected to have a property named config\nwhose value should be a JSON formatted string that should look like\nthis: \n\nconfig: |\n  {        \n    \"cassandra-yaml\": {\n      \"read_request_timeout_in_ms\": 10000\n    },\n    \"jvm-options\": {\n      \"max_heap_size\": 1024M\n    }\n  }\n\nConfigSecret is mutually exclusive with Config.\nConfigSecret takes precedence and will be used exclusively if both\nproperties are set. The operator sets a watch such that an update\nto the secret will trigger an update of the StatefulSets.\n"
-      displayName: Configuration Secret
-      x-descriptors:
-        - "urn:alm:descriptor:io.kubernetes:Secret"
-        - "urn:alm:descriptor:com.tectonic.ui:advanced"
-    - path: managementApiAuth
-      description: |
-        Configuration for connectivity between cass-operator and Management API
-      displayName: Management API Authentication
-    - path: tolerations
-      description: |
-        If specified, the pod's tolerations.
 
-        The pod this Toleration is attached to tolerates
-        any taint that matches the triple <key,value,effect> using
-        the matching operator <operator>.
-    - path: tolerations[0].effect
-      description: |
-        Effect indicates the taint effect to match.
-        Empty means match all taint effects. When specified,
-        allowed values are NoSchedule, PreferNoSchedule and
-        NoExecute.
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:select:NoSchedule"
-        - "urn:alm:descriptor:com.tectonic.ui:select:PreferNoSchedule"
-        - "urn:alm:descriptor:com.tectonic.ui:select:NoExecute"
-    - path: tolerations[0].key
-      description: |
-        Key is the taint key that the toleration
-        applies to. Empty means match all taint keys. If the
-        key is empty, operator must be Exists; this combination
-        means to match all values and all keys.
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:text"
-    - path: tolerations[0].operator
-      description: |
-        Operator represents a key's relationship
-        to the value. Valid operators are Exists and Equal.
-        Defaults to Equal. Exists is equivalent to wildcard
-        for value, so that a pod can tolerate all taints of
-        a particular category.
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:select:Exists"
-        - "urn:alm:descriptor:com.tectonic.ui:select:Equals"
-    - path: tolerations[0].tolerationSeconds
-      description: |
-        TolerationSeconds represents the period of
-        time the toleration (which must be of effect NoExecute,
-        otherwise this field is ignored) tolerates the taint.
-        By default, it is not set, which means tolerate the
-        taint forever (do not evict). Zero and negative values
-        will be treated as 0 (evict immediately) by the system.
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:number"
-    - path: tolerations[0].value
-      description: |
-        Value is the taint value the toleration matches
-        to. If the operator is Exists, the value should be empty,
-        otherwise just a regular string.
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:text"
-    - path: users
-      description: |
-        Cassandra users to bootstrap
-      displayName: Users
-    - path: users[0].secretName
-      description: |
-        Kubernetes secret containing user credentials within the keys `username` and `password`.
-      displayName: Secret
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:selector:core:v1:Secret"
-    - path: users[0].superuser
-      description: |
-        Whether the created user should have superuser credentials
-      displayName: Superuser
-      x-descriptors:
-        - "urn:alm:descriptor:com.tectonic.ui:booleanSwitch"
 ---
-- op: add
-  path: /spec/customresourcedefinitions/owned/0/statusDescriptors
-  value:
-    - path: cassandraOperatorProgress
-      description: Cassandra Operator Progress
-      displayName: Cassandra Operator Progress
-      x-descriptors:
-        - urn:alm:descriptor:text
-    - path: lastRollingRestart
-      description: Last Rolling Restart
-      displayName: Last Rolling Restart
-      x-descriptors:
-        - urn:alm:descriptor:text
-    - path: lastServerNodeStarted
-      description: Last Server Node Started
-      displayName: Last Server Node Started
-      x-descriptors:
-        - urn:alm:descriptor:text
-    - path: superUserUpserted
-      description: Super User Upserted
-      displayName: Super User Upserted
-      x-descriptors:
-        - urn:alm:descriptor:text
-    - path: nodeReplacements
-      description: |
-        List of all nodes that have been replaced.
-      displayName: Node Replacements
-    - path: nodeStatuses
-      description: |
-        Data structure containing information around the health
-        of all pods in the cluster.
-      displayName: Node Statuses
-    - path: observedGeneration
-      description: |
-        Holds information related to previous generations to detect when certain changes occur.
-      displayName: Observed Generation
-    - path: quietPeriod
-      description: |
-        Signals when reconcilliation should not occur due to waiting on other actions to complete.
-      displayName: Quiet Period
-    - path: conditions
-      description: conditions
-      displayName: Conditions
----
-# permissions for end users to edit cassandradatacenters.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: cassandradatacenter-editor-role
-rules:
-- apiGroups:
-  - cassandra.datastax.com
-  resources:
-  - cassandradatacenters
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cassandra.datastax.com
-  resources:
-  - cassandradatacenters/status
-  verbs:
-  - get
----
-# permissions to do leader election.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: leader-election-role
-rules:
-- apiGroups:
-  - ""
-  - coordination.k8s.io
-  resources:
-  - configmaps
-  - leases
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: leader-election-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: leader-election-role
-subjects:
-- kind: ServiceAccount
-  name: controller-manager
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: manager-role
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  - persistentvolumes
-  verbs:
-  - get
-  - list
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: manager-role
-  namespace: cass-operator
-rules:
-- apiGroups:
-  - apps
-  resources:
-  - daemonsets
-  - deployments
-  - replicasets
-  - statefulsets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - apps
-  resources:
-  - deployments/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - cassandra.datastax.com
-  resources:
-  - cassandradatacenters
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cassandra.datastax.com
-  resources:
-  - cassandradatacenters/finalizers
-  verbs:
-  - delete
-  - update
-- apiGroups:
-  - cassandra.datastax.com
-  resources:
-  - cassandradatacenters/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - control.k8ssandra.io
-  resources:
-  - cassandratasks
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - control.k8ssandra.io
-  resources:
-  - cassandratasks/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - control.k8ssandra.io
-  resources:
-  - cassandratasks/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - endpoints
-  - events
-  - persistentvolumeclaims
-  - pods
-  - secrets
-  - services
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  - pods
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - get
-- apiGroups:
-  - policy
-  resources:
-  - poddisruptionbudgets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: manager-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: manager-role
-subjects:
-- kind: ServiceAccount
-  name: controller-manager
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: manager-res-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cass-operator-manager-role
-subjects:
-- kind: ServiceAccount
-  name: controller-manager
----
+# Source: cass-operator/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: controller-manager
-  
+  name: cass-operator
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+secrets:
+  - name: cass-operator-token
+---
+# Source: cass-operator/templates/configmap.yaml
+kind: ConfigMap
+metadata:
+  name: cass-operator-manager-config
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+apiVersion: v1
+data:
+  controller_manager_config.yaml: |
+    apiVersion: config.k8ssandra.io/v1beta1
+    kind: OperatorConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: :8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: b569adb7.cassandra.datastax.com
+    disableWebhooks: true
+    imageConfigFile: /configs/image_config.yaml
+  image_config.yaml: |
+    apiVersion: config.k8ssandra.io/v1beta1
+    kind: ImageConfig
+    images:
+      system-logger: cr.k8ssandra.io/k8ssandra/system-logger:v1.19.0
+      config-builder: cr.dtsx.io/datastax/cass-config-builder:1.0-ubi8
+      k8ssandra-client: cr.k8ssandra.io/k8ssandra/k8ssandra-client:v0.2.2
+    imagePullPolicy: IfNotPresent
+    defaults:
+      # Note, postfix is ignored if repository is not set
+      cassandra:
+        repository: "cr.k8ssandra.io/k8ssandra/cass-management-api"
+        suffix;: "-ubi8"
+      dse:
+        repository: "cr.dtsx.io/datastax/dse-mgmtapi-6_8"
+        suffix: "-ubi8"
+---
+# Source: cass-operator/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cass-operator-cr
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - persistentvolumes
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: cass-operator/templates/clusterrolebinding.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cass-operator-cr
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+subjects:
+  - kind: ServiceAccount
+    name: cass-operator
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cass-operator-cr
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: cass-operator/templates/leader_election_role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cass-operator-leader
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+rules:
+  - apiGroups:
+      - ""
+      - coordination.k8s.io
+    resources:
+      - configmaps
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+# Source: cass-operator/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cass-operator
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - cassandra.datastax.com
+    resources:
+      - cassandradatacenters
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - cassandra.datastax.com
+    resources:
+      - cassandradatacenters/finalizers
+    verbs:
+      - delete
+      - update
+  - apiGroups:
+      - cassandra.datastax.com
+    resources:
+      - cassandradatacenters/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - control.k8ssandra.io
+    resources:
+      - cassandratasks
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - control.k8ssandra.io
+    resources:
+      - cassandratasks/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - control.k8ssandra.io
+    resources:
+      - cassandratasks/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - events
+      - persistentvolumeclaims
+      - pods
+      - secrets
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+      - pods
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - policy
+    resources:
+      - poddisruptionbudgets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: cass-operator/templates/leader_election_role_binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cass-operator-leader
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cass-operator-leader
+subjects:
+  - kind: ServiceAccount
+    name: cass-operator
+---
+# Source: cass-operator/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: cass-operator
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+subjects:
+  - kind: ServiceAccount
+    name: cass-operator
+roleRef:
+  kind: Role
+  name: cass-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: cass-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cass-operator
+  labels:     
+    app.kubernetes.io/name: cass-operator
+    helm.sh/chart: cass-operator-0.47.0
+    app.kubernetes.io/instance: cass-operator
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+    control-plane: cass-operator-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cass-operator
+      app.kubernetes.io/instance: cass-operator
+      app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+  template:
+    metadata:
+      labels:        
+        app.kubernetes.io/name: cass-operator
+        helm.sh/chart: cass-operator-0.47.0
+        app.kubernetes.io/instance: cass-operator
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: k8ssandra-cass-operator-default
+        control-plane: cass-operator-controller-manager
+    spec:
+      serviceAccountName: cass-operator
+      securityContext:
+        {}
+      containers:
+        - name: cass-operator
+          args:
+          - --config=/configs/controller_manager_config.yaml
+          command:
+          - /manager
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+          image: cr.k8ssandra.io/k8ssandra/cass-operator:v1.19.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /configs
+              name: manager-config
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {}
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      volumes:
+        - configMap:
+            name: cass-operator-manager-config
+          name: manager-config

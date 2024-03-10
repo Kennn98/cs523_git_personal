@@ -5,7 +5,7 @@ metadata:
 spec:
   clusterName: cluster1
   serverType: cassandra
-  serverVersion: "4.1.2"
+  serverVersion: "4.0.3"
   managementApiAuth:
     insecure: {}
   size: 3
@@ -26,8 +26,8 @@ spec:
     requests:
       memory: 300m
       cpu: 300m
-  racks:
-    - name: rack1
+  # racks:
+  #   - name: rack1
   config:
     jvm-server-options:
       initial_heap_size: "300m"
