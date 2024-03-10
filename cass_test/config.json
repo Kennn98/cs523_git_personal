@@ -1,0 +1,26 @@
+{
+    "deploy": {
+        "steps": [
+            {
+                "apply": {
+                    "namespace": null,
+                    "file": "cass_test/cert-manager.yaml"
+                }
+            },
+            {
+                "wait": {
+                    "duration": 30
+                }
+            },
+            {
+                "apply": {
+                    "file": "cass_test/crd.yaml",
+                    "operator": true
+                }
+            }
+        ]
+    },
+    "crd_name": "cassandradatacenters.cassandra.datastax.com",
+    "seed_custom_resource": "cass_test/cr_sample.yaml",
+    "kubernetes_version": "v1.29.1"
+}
