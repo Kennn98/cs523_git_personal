@@ -5,10 +5,10 @@ metadata:
 spec:
   clusterName: cluster1
   serverType: cassandra
-  serverVersion: "4.0.3"
+  serverVersion: 4.0.1
   managementApiAuth:
     insecure: {}
-  size: 3
+  size: 1
   storageConfig:
       cassandraDataVolumeClaimSpec:
         storageClassName: server-storage
@@ -16,18 +16,7 @@ spec:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 300m
-  podTemplateSpec:
-    spec:
-      containers:
-        - name: "cassandra"
-      securityContext: {}
-  resources:
-    requests:
-      memory: 300m
-      cpu: 300m
-  # racks:
-  #   - name: rack1
+            storage: 1Gi
   config:
     jvm-server-options:
       initial_heap_size: "300m"
